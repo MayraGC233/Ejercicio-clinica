@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clínica Gine-Obst-Pedi | Gestión Clínica</title>
+  <meta name="description" content="App de gestión clínica para ginecología, obstetricia y pediatría conectada a Google Sheets" />
+
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef9ff', 100: '#d6f0ff', 200: '#b5e5ff', 300: '#84d2ff',
+              400: '#4db9ff', 500: '#1b98ff', 600: '#0a7fe6', 700: '#0863b3',
+              800: '#094f8c', 900: '#0c416f', 950: '#092b49'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Estilos mínimos adicionales */
+    .container-narrow{max-width:1100px}
+    .shadow-soft{box-shadow:0 10px 30px rgba(2,6,23,.06)}
+    .card{border-radius:1rem}
+    .required:after{content:" *"; color:#ef4444}
+    /* Chips para estados */
+    .chip{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .6rem;border-radius:9999px;font-size:.75rem;font-weight:600}
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <!-- Encabezado -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="mx-auto container-narrow px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-2xl bg-brand-100 grid place-items-center text-brand-700 font-bold">🏥</div>
+        <div>
+          <h1 class="text-xl font-bold leading-tight">Clínica Gine · Obst · Pedi</h1>
+          <p class="text-slate-500 text-sm -mt-1">Al cuidado integral de la mujer, el embarazo y la niñez</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button id="btnSyncNow" class="px-3 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700 transition">⤴️ Sincronizar</button>
+        <button id="btnSettings" class="px-3 py-2 rounded-xl bg-slate-800 text-white hover:bg-black transition">⚙️ Configuración</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenido principal -->
+  <main class="mx-auto container-narrow px-4 py-6">
+    <!-- Navegación por pestañas -->
+    <nav class="mb-5">
+      <ul class="flex gap-2 flex-wrap" id="tabs">
+        <li><button data-tab="registro" class="tab active px-4 py-2 rounded-xl bg-white border shadow-soft">📝 Registro</button></li>
+        <li><button data-tab="consulta" class="tab px-4 py-2 rounded-xl bg-white border shadow-soft">🩺 Consulta</button></li>
+        <li><button data-tab="citas" class="tab px-4 py-2 rounded-xl bg-white border shadow-soft">📅 Citas</button></li>
+        <li><button data-tab="reportes" class="tab px-4 py-2 rounded-xl bg-white border shadow-soft">📊 Reportes</button></li>
+      </ul>
+    </nav>
+
+    <!-- Alertas -->
+    <div id="alerts" class="space-y-2 mb-6"></div>
+
+    <!-- Tarjeta: Registro de Pacientes -->
+    <section id="panel-registro" class="card bg-white p-5 border shadow-soft">
+      <h2 class="text-lg font-semibold mb-4">📝 Registro de Paciente</h2>
+      <form id="formRegistro" class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm required">Número de Historia/Expediente</label>
+          <input name="expediente" type="text" required class="mt-1 w-full border rounded-lg p-2" placeholder="e.g. EXP-0001" />
+        </div>
+        <div>
+          <label class="block text-sm required">Nombre completo</label>
+          <input name="nombre" type="text" required class="mt-1 w-full border rounded-lg p-2" placeholder="Nombre y apellidos" />
+        </div>
+        <div>
+          <label class="block text-sm required">Fecha de nacimiento</label>
+          <input name="fechaNacimiento" type="date" required class="mt-1 w-full border rounded-lg p-2" />
+        </div>
+        <div>
+          <label class="block text-sm required">Sexo</label>
+          <select name="sexo" required class="mt-1 w-full border rounded-lg p-2">
+            <option value="" disabled selected>Selecciona…</option>
+            <option>Femenino</option>
+            <option>Masculino</option>
+            <option>Intersexual/Otro</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm">Teléfono</label>
+          <input name="telefono" type="tel" class="mt-1 w-full border rounded-lg p-2" placeholder="+52…" />
+        </div>
+        <div>
+          <label class="block text-sm">Correo</label>
+          <input name="email" type="email" class="mt-1 w-full border rounded-lg p-2" placeholder="correo@dominio.com" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm">Dirección</label>
+          <input name="direccion" type="text" class="mt-1 w-full border rounded-lg p-2" placeholder="Calle, número, colonia, CP" />
+        </div>
+        <div class="md:col-span-2 flex items-center justify-between mt-2">
+          <div class="flex items-center gap-2">
+            <span class="chip bg-slate-100 text-slate-700">⌛ Se guarda local si no hay internet</span>
+            <span class="chip bg-green-100 text-green-700" id="statusSyncChip">● En línea</span>
+          </div>
+          <div class="flex gap-2">
+            <button type="reset" class="px-3 py-2 rounded-xl border">🧹 Limpiar</button>
+            <button type="submit" class="px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700">💾 Guardar</button>
+          </div>
+        </div>
+      </form>
+
+      <hr class="my-5"/>
+
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold">Pacientes registrados</h3>
+        <div class="flex gap-2">
+          <input id="buscarPac" type="search" placeholder="Buscar…" class="border rounded-lg p-2" />
+          <button id="btnRecargarPac" class="px-3 py-2 rounded-xl border">🔄 Recargar</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm" id="tablaPacientes">
+          <thead>
+            <tr class="bg-slate-100 text-left">
+              <th class="p-2">Expediente</th>
+              <th class="p-2">Nombre</th>
+              <th class="p-2">Edad</th>
+              <th class="p-2">Sexo</th>
+              <th class="p-2">Contacto</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tarjeta: Consulta -->
+    <section id="panel-consulta" class="hidden card bg-white p-5 border shadow-soft">
+      <h2 class="text-lg font-semibold mb-4">🩺 Registro de Consulta</h2>
+      <form id="formConsulta" class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm required">Expediente</label>
+          <input name="expediente" type="text" required class="mt-1 w-full border rounded-lg p-2" placeholder="EXP-0001" />
+        </div>
+        <div>
+          <label class="block text-sm required">Especialidad</label>
+          <select name="especialidad" required class="mt-1 w-full border rounded-lg p-2">
+            <option value="" disabled selected>Selecciona…</option>
+            <option>Ginecología</option>
+            <option>Obstetricia</option>
+            <option>Pediatría</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm required">Motivo de consulta</label>
+          <input name="motivo" required class="mt-1 w-full border rounded-lg p-2" placeholder="Dolor, control, etc." />
+        </div>
+        <div>
+          <label class="block text-sm">Signos vitales</label>
+          <input name="vitales" class="mt-1 w-full border rounded-lg p-2" placeholder="TA, FC, FR, Temp" />
+        </div>
+        <div>
+          <label class="block text-sm required">🚨 Nivel de urgencia</label>
+          <select name="urgencia" required class="mt-1 w-full border rounded-lg p-2">
+            <option disabled selected>Selecciona…</option>
+            <option>Bajo</option>
+            <option>Moderado</option>
+            <option>Alto</option>
+          </select>
+        </div>
+
+        <!-- Campos condicionales -->
+        <div data-scope="Ginecología" class="hidden md:col-span-2 grid md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm">Ultima menstruación (FUR)</label>
+            <input name="fur" type="date" class="mt-1 w-full border rounded-lg p-2" />
+          </div>
+          <div>
+            <label class="block text-sm">Papanicolau (fecha)</label>
+            <input name="papa" type="date" class="mt-1 w-full border rounded-lg p-2" />
+          </div>
+        </div>
+
+        <div data-scope="Obstetricia" class="hidden md:col-span-2 grid md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm">FUR</label>
+            <input name="furObst" type="date" class="mt-1 w-full border rounded-lg p-2" />
+          </div>
+          <div>
+            <label class="block text-sm">Semanas gestación</label>
+            <input name="semanas" type="number" step="0.1" class="mt-1 w-full border rounded-lg p-2" />
+          </div>
+          <div>
+            <label class="block text-sm">FPP (estimada)</label>
+            <input name="fpp" type="date" class="mt-1 w-full border rounded-lg p-2" />
+          </div>
+        </div>
+
+        <div data-scope="Pediatría" class="hidden md:col-span-2 grid md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm">Peso (kg)</label>
+            <input name="peso" type="number" step="0.01" class="mt-1 w-full border rounded-lg p-2" />
+          </div>
+          <div>
+            <label class="block text-sm">Talla (cm)</label>
+            <input name="talla" type="number" step="0.1" class="mt-1 w-full border rounded-lg p-2" />
+          </div>
+          <div>
+            <label class="block text-sm">Vacunas</label>
+            <input name="vacunas" class="mt-1 w-full border rounded-lg p-2" placeholder="Esquema aplicado" />
+          </div>
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-sm">Diagnóstico</label>
+          <textarea name="diagnostico" rows="3" class="mt-1 w-full border rounded-lg p-2" placeholder="CIE-10 opcional"></textarea>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm">Tratamiento / Indicaciones</label>
+          <textarea name="tratamiento" rows="3" class="mt-1 w-full border rounded-lg p-2"></textarea>
+        </div>
+
+        <div class="md:col-span-2 flex items-center justify-between mt-2">
+          <div class="flex items-center gap-3">
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" name="consent" required class="accent-brand-600">
+              <span>Acepto el consentimiento informado</span>
+            </label>
+            <span class="chip bg-amber-100 text-amber-700">Guardado escalonado si está sin red</span>
+          </div>
+          <div class="flex gap-2">
+            <button type="reset" class="px-3 py-2 rounded-xl border">🧹 Limpiar</button>
+            <button type="submit" class="px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700">💾 Guardar consulta</button>
+          </div>
+        </div>
+      </form>
+
+      <hr class="my-5"/>
+
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold">Consultas recientes</h3>
+        <div class="flex gap-2">
+          <select id="filtroEspecialidad" class="border rounded-lg p-2">
+            <option value="">Todas</option>
+            <option>Ginecología</option>
+            <option>Obstetricia</option>
+            <option>Pediatría</option>
+          </select>
+          <button id="btnRecargarCons" class="px-3 py-2 rounded-xl border">🔄 Recargar</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm" id="tablaConsultas">
+          <thead>
+            <tr class="bg-slate-100 text-left">
+              <th class="p-2">Fecha</th>
+              <th class="p-2">Expediente</th>
+              <th class="p-2">Especialidad</th>
+              <th class="p-2">Motivo</th>
+              <th class="p-2">Urgencia</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tarjeta: Citas -->
+    <section id="panel-citas" class="hidden card bg-white p-5 border shadow-soft">
+      <h2 class="text-lg font-semibold mb-4">📅 Gestión de Citas</h2>
+      <form id="formCita" class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm required">Expediente</label>
+          <input name="expediente" required class="mt-1 w-full border rounded-lg p-2" />
+        </div>
+        <div>
+          <label class="block text-sm required">Especialidad</label>
+          <select name="especialidad" required class="mt-1 w-full border rounded-lg p-2">
+            <option value="" disabled selected>Selecciona…</option>
+            <option>Ginecología</option>
+            <option>Obstetricia</option>
+            <option>Pediatría</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm required">Fecha</label>
+          <input name="fecha" type="date" required class="mt-1 w-full border rounded-lg p-2" />
+        </div>
+        <div>
+          <label class="block text-sm required">Hora</label>
+          <input name="hora" type="time" required class="mt-1 w-full border rounded-lg p-2" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm">Notas</label>
+          <input name="notas" class="mt-1 w-full border rounded-lg p-2" placeholder="Motivo, preferencia médica, etc." />
+        </div>
+        <div class="md:col-span-2 flex items-center justify-end gap-2">
+          <button type="reset" class="px-3 py-2 rounded-xl border">🧹 Limpiar</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700">💾 Guardar cita</button>
+        </div>
+      </form>
+
+      <hr class="my-5" />
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm" id="tablaCitas">
+          <thead>
+            <tr class="bg-slate-100 text-left">
+              <th class="p-2">Fecha</th>
+              <th class="p-2">Hora</th>
+              <th class="p-2">Expediente</th>
+              <th class="p-2">Especialidad</th>
+              <th class="p-2">Notas</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tarjeta: Reportes -->
+    <section id="panel-reportes" class="hidden card bg-white p-5 border shadow-soft">
+      <h2 class="text-lg font-semibold mb-4">📊 Reportes rápidos</h2>
+      <div class="grid md:grid-cols-3 gap-4">
+        <div class="p-4 rounded-2xl border bg-slate-50">
+          <div class="text-sm text-slate-500">Pacientes</div>
+          <div class="text-3xl font-bold" id="kpiPacientes">0</div>
+        </div>
+        <div class="p-4 rounded-2xl border bg-slate-50">
+          <div class="text-sm text-slate-500">Consultas (30 días)</div>
+          <div class="text-3xl font-bold" id="kpiConsultas">0</div>
+        </div>
+        <div class="p-4 rounded-2xl border bg-slate-50">
+          <div class="text-sm text-slate-500">Citas próximas (7 días)</div>
+          <div class="text-3xl font-bold" id="kpiCitas">0</div>
+        </div>
+      </div>
+
+      <div class="mt-6 flex gap-2">
+        <button id="btnExportCSV" class="px-4 py-2 rounded-xl border">⬇️ Exportar CSV</button>
+        <button id="btnVaciarLocal" class="px-4 py-2 rounded-xl border text-red-700">🗑️ Limpiar datos locales</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal Configuración -->
+  <dialog id="dlgSettings" class="rounded-2xl p-0 w-[min(680px,95vw)]">
+    <form method="dialog" class="bg-white p-5 rounded-2xl border shadow-soft">
+      <h3 class="text-lg font-semibold mb-2">⚙️ Configuración</h3>
+      <p class="text-sm text-slate-600 mb-4">Pega la URL desplegada de tu Google Apps Script (Web App). Se guarda localmente en este navegador.</p>
+      <label class="block text-sm mb-1">URL del Web App (GAS)</label>
+      <input id="txtWebAppUrl" class="w-full border rounded-lg p-2" placeholder="https://script.google.com/macros/s/AKfycbx.../exec" />
+      <div class="flex justify-end gap-2 mt-4">
+        <button class="px-3 py-2 rounded-xl border">Cancelar</button>
+        <button id="btnGuardarSettings" class="px-4 py-2 rounded-xl bg-brand-600 text-white">Guardar</button>
+      </div>
+
+      <details class="mt-4">
+        <summary class="cursor-pointer text-sm text-slate-700 font-semibold">Cómo crear el backend en Google Apps Script</summary>
+        <ol class="list-decimal pl-5 text-sm text-slate-600 mt-2 space-y-2">
+          <li>En Google Drive, crea una Hoja de cálculo llamada <strong>Clinica</strong> con hojas: <code>Pacientes</code>, <code>Consultas</code> y <code>Citas</code> (respetando esas cabeceras tal como se muestran abajo).</li>
+          <li>Abre <em>Extensiones → Apps Script</em> y pega el código de <strong>Apps Script</strong> incluido al final de este archivo HTML (búscalo como <code>/* === GOOGLE APPS SCRIPT (GS) === */</code>).</li>
+          <li>Reemplaza el ID de la hoja si usas una específica, o usa <code>SpreadsheetApp.getActive()</code>.</li>
+          <li>Publica como <em>Implementar → Nueva implementación → Tipo: Aplicación web</em>. Acceso: <em>Cualquiera con el enlace</em>. Copia la URL y pégala aquí.</li>
+        </ol>
+      </details>
+    </form>
+  </dialog>
+
+  <!-- Scripts de la App -->
+  <script>
+  // ======= CONFIG =======
+  const STORAGE_KEYS = {
+    settings: 'clinica_settings',
+    queue: 'clinica_queue',
+    cachePac: 'clinica_cache_pacientes',
+    cacheCons: 'clinica_cache_consultas',
+    cacheCitas: 'clinica_cache_citas'
+  };
+
+  function getSettings(){
+    const s = JSON.parse(localStorage.getItem(STORAGE_KEYS.settings) || '{}');
+    return { webAppUrl: s.webAppUrl || '' };
+  }
+  function saveSettings(obj){ localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(obj)); }
+
+  function alertBox(type, msg){
+    const colors = {
+      info: 'bg-sky-50 border-sky-200 text-sky-800',
+      success: 'bg-green-50 border-green-200 text-green-800',
+      warn: 'bg-amber-50 border-amber-200 text-amber-800',
+      error: 'bg-red-50 border-red-200 text-red-800'
+    };
+    const div = document.createElement('div');
+    div.className = `p-3 rounded-xl border ${colors[type]||colors.info}`;
+    div.textContent = msg;
+    document.getElementById('alerts').prepend(div);
+    setTimeout(()=>div.remove(), 7000);
+  }
+
+  function setOnlineStatus(){
+    const chip = document.getElementById('statusSyncChip');
+    if(navigator.onLine){ chip.textContent = '● En línea'; chip.className='chip bg-green-100 text-green-700'; }
+    else { chip.textContent = '● Sin conexión'; chip.className='chip bg-amber-100 text-amber-700'; }
+  }
+
+  // ======= TABS =======
+  document.querySelectorAll('.tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active','bg-brand-600','text-white'))
+      document.querySelectorAll('section[id^=panel-]').forEach(p=>p.classList.add('hidden'))
+      btn.classList.add('active','bg-brand-600','text-white');
+      document.getElementById('panel-'+btn.dataset.tab).classList.remove('hidden')
+    })
+  })
+
+  // ======= FORM REGISTRO PACIENTE =======
+  document.getElementById('formRegistro').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target).entries());
+    if(!data.expediente || !data.nombre){ return alertBox('warn','Completa los campos obligatorios.'); }
+    const payload = {action:'createPaciente', record:{...data}};
+    queueOrSend(payload, {cacheKey: STORAGE_KEYS.cachePac});
+    e.target.reset();
+  })
+
+  // ======= FORM CONSULTA =======
+  const formConsulta = document.getElementById('formConsulta');
+  formConsulta.addEventListener('change', (e)=>{
+    if(e.target.name==='especialidad'){
+      document.querySelectorAll('[data-scope]').forEach(el=>el.classList.add('hidden'))
+      const scope = e.target.value;
+      const target = document.querySelector(`[data-scope="${scope}"]`);
+      if(target) target.classList.remove('hidden');
+    }
+  })
+  formConsulta.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target).entries());
+    if(!data.expediente || !data.especialidad || !data.motivo){ return alertBox('warn','Completa los campos de expediente, especialidad y motivo.'); }
+    const payload = {action:'createConsulta', record:{...data, fecha: new Date().toISOString()}};
+    queueOrSend(payload, {cacheKey: STORAGE_KEYS.cacheCons});
+    e.target.reset();
+  })
+
+  // ======= FORM CITA =======
+  document.getElementById('formCita').addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target).entries());
+    const payload = {action:'createCita', record:{...data}};
+    queueOrSend(payload, {cacheKey: STORAGE_KEYS.cacheCitas});
+    e.target.reset();
+  })
+
+  // ======= QUEUE (Guardado escalonado/offline) =======
+  function getQueue(){ return JSON.parse(localStorage.getItem(STORAGE_KEYS.queue) || '[]'); }
+  function setQueue(q){ localStorage.setItem(STORAGE_KEYS.queue, JSON.stringify(q)); }
+
+  async function queueOrSend(payload, {cacheKey}){
+    // Guardar optimista en cache local para tablas
+    addToLocalCache(cacheKey, payload.record);
+
+    const {webAppUrl} = getSettings();
+    if(!webAppUrl){
+      alertBox('info','Configura la URL del Web App (⚙️) para sincronizar con Google Sheets. El dato queda en cola.');
+      pushQueue(payload);
+      renderAll();
+      return;
+    }
+
+    if(!navigator.onLine){
+      alertBox('warn','Sin conexión. Guardado en cola. Se enviará automáticamente al volver la red.');
+      pushQueue(payload);
+      renderAll();
+      return;
+    }
+
+    try{
+      await sendToWebApp(webAppUrl, payload);
+      alertBox('success','Dato guardado en Google Sheets.');
+      renderAll(true);
+    }catch(err){
+      alertBox('error','No se pudo enviar. Queda en cola.');
+      pushQueue(payload);
+      renderAll();
+    }
+  }
+
+  function pushQueue(item){ const q = getQueue(); q.push({...item, _ts: Date.now()}); setQueue(q); updateSyncBadge(); }
+
+  async function drainQueue(){
+    const {webAppUrl} = getSettings(); if(!webAppUrl) return;
+    let q = getQueue(); if(q.length===0) return;
+    const remain=[];
+    for(const item of q){
+      try{ await sendToWebApp(webAppUrl, item); }
+      catch{ remain.push(item); }
+    }
+    setQueue(remain);
+    updateSyncBadge();
+    if(remain.length===0) alertBox('success','Cola sincronizada con éxito.');
+  }
+
+  async function sendToWebApp(url, payload){
+    const res = await fetch(url, { method:'POST', mode:'cors', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    return res.json();
+  }
+
+  function updateSyncBadge(){
+    const len = getQueue().length;
+    const btn = document.getElementById('btnSyncNow');
+    btn.textContent = len>0 ? `⤴️ Sincronizar (${len})` : '⤴️ Sincronizar';
+  }
+
+  // ======= CACHE & RENDER TABLAS =======
+  function addToLocalCache(key, rec){
+    const arr = JSON.parse(localStorage.getItem(key) || '[]');
+    arr.unshift(rec);
+    localStorage.setItem(key, JSON.stringify(arr));
+  }
+  function setLocalCache(key, arr){ localStorage.setItem(key, JSON.stringify(arr||[])); }
+  function getLocalCache(key){ return JSON.parse(localStorage.getItem(key) || '[]'); }
+
+  function renderPacientes(){
+    const q = (document.getElementById('buscarPac').value||'').toLowerCase();
+    const tbody = document.querySelector('#tablaPacientes tbody');
+    tbody.innerHTML='';
+    getLocalCache(STORAGE_KEYS.cachePac)
+      .filter(r => !q || JSON.stringify(r).toLowerCase().includes(q))
+      .slice(0,200)
+      .forEach(r=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class='p-2'>${r.expediente||''}</td>
+                        <td class='p-2'>${r.nombre||''}</td>
+                        <td class='p-2'>${calcEdad(r.fechaNacimiento)||''}</td>
+                        <td class='p-2'>${r.sexo||''}</td>
+                        <td class='p-2'>${r.telefono||''} ${r.email? '· '+r.email:''}</td>`;
+        tbody.appendChild(tr);
+      })
+  }
+
+  function renderConsultas(){
+    const filtro = document.getElementById('filtroEspecialidad').value;
+    const tbody = document.querySelector('#tablaConsultas tbody');
+    tbody.innerHTML='';
+    getLocalCache(STORAGE_KEYS.cacheCons)
+      .filter(r => !filtro || r.especialidad===filtro)
+      .slice(0,200)
+      .forEach(r=>{
+        const chip = r.urgencia==='Alto' ? "bg-red-100 text-red-700" : (r.urgencia==='Moderado' ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700");
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class='p-2'>${fmtFechaHora(r.fecha)||''}</td>
+                        <td class='p-2'>${r.expediente||''}</td>
+                        <td class='p-2'>${r.especialidad||''}</td>
+                        <td class='p-2'>${r.motivo||''}</td>
+                        <td class='p-2'><span class='chip ${chip}'>${r.urgencia||''}</span></td>`;
+        tbody.appendChild(tr);
+      })
+  }
+
+  function renderCitas(){
+    const tbody = document.querySelector('#tablaCitas tbody');
+    tbody.innerHTML='';
+    getLocalCache(STORAGE_KEYS.cacheCitas)
+      .slice(0,200)
+      .forEach(r=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class='p-2'>${r.fecha||''}</td>
+                        <td class='p-2'>${r.hora||''}</td>
+                        <td class='p-2'>${r.expediente||''}</td>
+                        <td class='p-2'>${r.especialidad||''}</td>
+                        <td class='p-2'>${r.notas||''}</td>`;
+        tbody.appendChild(tr);
+      })
+  }
+
+  function renderKPIs(){
+    document.getElementById('kpiPacientes').textContent = getLocalCache(STORAGE_KEYS.cachePac).length;
+    const cutoff30 = Date.now() - 1000*60*60*24*30;
+    document.getElementById('kpiConsultas').textContent = getLocalCache(STORAGE_KEYS.cacheCons).filter(r=>Date.parse(r.fecha||'')>cutoff30).length;
+    const cutoff7 = Date.now() + 1000*60*60*24*7;
+    const today = Date.now() - 1000*60*60*24*1;
+    document.getElementById('kpiCitas').textContent = getLocalCache(STORAGE_KEYS.cacheCitas).filter(r=>{
+      const t = Date.parse(r.fecha+'T'+(r.hora||'00:00')+':00');
+      return t>today && t<cutoff7;
+    }).length;
+  }
+
+  function renderAll(kpisOnly=false){
+    if(!kpisOnly){
+      renderPacientes();
+      renderConsultas();
+      renderCitas();
+    }
+    renderKPIs();
+    updateSyncBadge();
+  }
+
+  // ======= UTIL =======
+  function calcEdad(fechaStr){
+    if(!fechaStr) return '';
+    const f = new Date(fechaStr);
+    if(isNaN(f)) return '';
+    const diff = Date.now()-f.getTime();
+    const age = new Date(diff).getUTCFullYear()-1970;
+    return age+" años";
+  }
+  function fmtFechaHora(iso){ if(!iso) return ''; const d=new Date(iso); return d.toLocaleString(); }
+
+  // ======= EXPORT CSV =======
+  function toCSV(arr){
+    if(!arr||!arr.length) return '';
+    const headers = [...new Set(arr.flatMap(o=>Object.keys(o)))];
+    const lines = [headers.join(',')];
+    for(const o of arr){
+      lines.push(headers.map(h=>JSON.stringify(o[h]??'')).join(','));
+    }
+    return lines.join('\n');
+  }
+  function download(filename, text){
+    const blob = new Blob([text], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ======= EVENTOS GLOBALES =======
+  window.addEventListener('online', ()=>{ setOnlineStatus(); drainQueue(); });
+  window.addEventListener('offline', ()=>{ setOnlineStatus(); });
+
+  document.getElementById('btnSyncNow').addEventListener('click', ()=> drainQueue());
+  document.getElementById('btnRecargarPac').addEventListener('click', ()=> renderPacientes());
+  document.getElementById('btnRecargarCons').addEventListener('click', ()=> renderConsultas());
+  document.getElementById('buscarPac').addEventListener('input', ()=> renderPacientes());
+  document.getElementById('filtroEspecialidad').addEventListener('change', ()=> renderConsultas());
+  document.getElementById('btnExportCSV').addEventListener('click', ()=>{
+    const all = {
+      pacientes: getLocalCache(STORAGE_KEYS.cachePac),
+      consultas: getLocalCache(STORAGE_KEYS.cacheCons),
+      citas: getLocalCache(STORAGE_KEYS.cacheCitas)
+    };
+    const csv = [
+      '# Pacientes', toCSV(all.pacientes), '',
+      '# Consultas', toCSV(all.consultas), '',
+      '# Citas', toCSV(all.citas)
+    ].join('\n');
+    download('clinica_export.csv', csv);
+  });
+  document.getElementById('btnVaciarLocal').addEventListener('click', ()=>{
+    if(confirm('¿Borrar datos locales (no en Sheets)?')){
+      setLocalCache(STORAGE_KEYS.cachePac, []);
+      setLocalCache(STORAGE_KEYS.cacheCons, []);
+      setLocalCache(STORAGE_KEYS.cacheCitas, []);
+      renderAll();
+    }
+  });
+
+  // ======= SETTINGS MODAL =======
+  const dlg = document.getElementById('dlgSettings');
+  document.getElementById('btnSettings').addEventListener('click', ()=>{
+    document.getElementById('txtWebAppUrl').value = getSettings().webAppUrl || '';
+    dlg.showModal();
+  });
+  document.getElementById('btnGuardarSettings').addEventListener('click', (e)=>{
+    e.preventDefault();
+    const url = document.getElementById('txtWebAppUrl').value.trim();
+    if(!url){alertBox('warn','Ingresa una URL válida.'); return;}
+    saveSettings({webAppUrl:url});
+    dlg.close();
+    alertBox('success','URL guardada. Ya puedes sincronizar.');
+    drainQueue();
+  });
+
+  // ======= INICIALIZACIÓN =======
+  (function init(){
+    setOnlineStatus();
+    renderAll();
+  })();
+  </script>
+
+  <!-- ============================================= -->
+  <!-- === GOOGLE APPS SCRIPT (GS) — COPIA Y PEGA === -->
+  <!-- ============================================= -->
+  <!--
+  // Archivo: Code.gs
+  // 1) En tu hoja, crea 3 hojas con cabeceras exactas:
+  //    - Pacientes: expediente, nombre, fechaNacimiento, sexo, telefono, email, direccion
+  //    - Consultas: fecha, expediente, especialidad, motivo, vitales, urgencia, fur, papa, furObst, semanas, fpp, peso, talla, vacunas, diagnostico, tratamiento, consent
+  //    - Citas: fecha, hora, expediente, especialidad, notas
+  // 2) Publica como Aplicación web (cualquiera con el enlace) y pega la URL en la app.
+
+  const SHEET_NAMES = { PAC:'Pacientes', CON:'Consultas', CIT:'Citas' };
+
+  function doPost(e){
+    try{
+      const data = JSON.parse(e.postData.contents);
+      const action = data.action;
+      const record = data.record || {};
+
+      const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type':'application/json' };
+
+      let result = {};
+      if(action==='createPaciente'){
+        result = appendRow(SHEET_NAMES.PAC, record, ['expediente','nombre','fechaNacimiento','sexo','telefono','email','direccion']);
+      } else if(action==='createConsulta'){
+        result = appendRow(SHEET_NAMES.CON, record, ['fecha','expediente','especialidad','motivo','vitales','urgencia','fur','papa','furObst','semanas','fpp','peso','talla','vacunas','diagnostico','tratamiento','consent']);
+      } else if(action==='createCita'){
+        result = appendRow(SHEET_NAMES.CIT, record, ['fecha','hora','expediente','especialidad','notas']);
+      } else if(action==='listPacientes'){
+        result = listRows(SHEET_NAMES.PAC);
+      } else if(action==='listConsultas'){
+        result = listRows(SHEET_NAMES.CON);
+      } else if(action==='listCitas'){
+        result = listRows(SHEET_NAMES.CIT);
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({ok:false,error:'Acción no válida'})).setMimeType(ContentService.MimeType.JSON).setHeaders(cors);
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({ok:true, data: result}))
+        .setMimeType(ContentService.MimeType.JSON)
+        .setHeaders(cors);
+    }catch(err){
+      return ContentService.createTextOutput(JSON.stringify({ok:false,error:String(err)}))
+        .setMimeType(ContentService.MimeType.JSON)
+        .setHeaders({'Access-Control-Allow-Origin':'*','Content-Type':'application/json'});
+    }
+  }
+
+  function appendRow(sheetName, obj, headers){
+    const ss = SpreadsheetApp.getActive();
+    const sh = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+    ensureHeaders(sh, headers);
+    const row = headers.map(h=> (obj[h]!==undefined? obj[h] : ''));
+    sh.appendRow(row);
+    return {sheet:sheetName, row: sh.getLastRow()};
+  }
+
+  function listRows(sheetName){
+    const ss = SpreadsheetApp.getActive();
+    const sh = ss.getSheetByName(sheetName);
+    if(!sh) return [];
+    const rng = sh.getDataRange().getValues();
+    const headers = rng.shift();
+    return rng.map(r => Object.fromEntries(headers.map((h,i)=> [h, r[i]])));
+  }
+
+  function ensureHeaders(sh, headers){
+    const first = sh.getRange(1,1,1,sh.getMaxColumns()).getValues()[0].filter(String);
+    if(first.length===0){ sh.getRange(1,1,1,headers.length).setValues([headers]); }
+  }
+
+  // Permitir preflight (opcional)
+  function doGet(){
+    return ContentService.createTextOutput('Clinica API OK').setMimeType(ContentService.MimeType.TEXT);
+  }
+  -->
+
+</body>
+</html>
